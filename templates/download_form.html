@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Satellite Image Downloader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Download Satellite Images</h1>
+        </div>
+        
+        <form id="download-form" action="{{ url_for('download') }}" method="post">
+            <div class="form-group">
+                <label>Select Countries:</label>
+                <select name="countries" multiple required>
+                    {% for country in countries %}
+                    <option value="{{ country }}">{{ country }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Start Year:</label>
+                <input type="number" name="start_year" min="2013" max="2024" required>
+            </div>
+            
+            <div class="form-group">
+                <label>End Year:</label>
+                <input type="number" name="end_year" min="2013" max="2024" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Resolution (meters):</label>
+                <input type="number" name="resolution" min="500" max="5000" value="5000" required>
+                <small>Lower values mean higher resolution. Maximum file size: 64MB</small>
+            </div>
+            
+            <button type="submit" id="download-btn">Download Images</button>
+        </form>
+
+        <div id="downloading-message" style="display:none; margin-top:1rem; color:#3498db; font-weight:bold;">
+            Downloading...
+        </div>
+
+        <div id="download-progress" style="display: none;">
+            <h3>Download Progress</h3>
+            <div id="progress-items"></div>
+        </div>
+        
+        <div id="resolution-warning" class="warning-box" style="display: none;">
+            Warning: Resolution too high for selected country. 
+            Suggested resolution: <span id="suggested-resolution"></span>m
+        </div>
+    </div>
+
+    <script>
+        const form = document.querySelector('form');
+        const resolutionInput = document.querySelector('input[name="resolution"]');
+        const countrySelect = document.querySelector('select[name="countries"]');
+
+        async function validateResolution() {
+            const country = countrySelect.value;
+            const resolution = resolutionInput.value;
+            
+            const formData = new FormData();
+            formData.append('country', country);
+            formData.append('resolution', resolution);
+            
+            const response = await fetch('/validate-resolution', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            if (!data.valid) {
+                document.getElementById('resolution-warning').style.display = 'block';
+                document.getElementById('suggested-resolution').textContent = 
+                    data.suggested_resolution;
+                return false;
+            }
+            return true;
+        }
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            if (!await validateResolution()) {
+                return;
+            }
+            
+            // Show the downloading message
+            document.getElementById('downloading-message').style.display = 'block';
+            document.getElementById('download-progress').style.display = 'none';
+
+            const formData = new FormData(form);
+            const response = await fetch('/download', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            const progressDiv = document.getElementById('download-progress');
+            progressDiv.style.display = 'block';
+            document.getElementById('downloading-message').style.display = 'none';
+            
+            const progressItems = document.getElementById('progress-items');
+            progressItems.innerHTML = data.results.map(result => `
+                <div class="progress-item ${result.status}">
+                    ${result.country}: ${result.message}
+                </div>
+            `).join('');
+        };
+    </script>
+</body>
+</html>
